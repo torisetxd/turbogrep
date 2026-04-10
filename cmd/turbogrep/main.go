@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"turbogrep/internal/bench"
-	"turbogrep/internal/index"
+	"github.com/torisetxd/turbogrep/internal/bench"
+	"github.com/torisetxd/turbogrep/internal/index"
 )
 
 func main() {
@@ -37,6 +37,7 @@ func runIndex(args []string) {
 	fs := flag.NewFlagSet("index", flag.ExitOnError)
 	repo := fs.String("repo", "", "repository root")
 	idxDir := fs.String("index", ".turbogrep-index", "index directory")
+	respectGitIgnore := fs.Bool("gitignore", true, "respect .gitignore while indexing")
 	fs.Parse(args)
 
 	if *repo == "" {
@@ -44,7 +45,7 @@ func runIndex(args []string) {
 		os.Exit(2)
 	}
 
-	stats, err := index.Build(*repo, *idxDir)
+	stats, err := index.BuildWithOptions(*repo, *idxDir, index.BuildOptions{RespectGitIgnore: *respectGitIgnore})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "index build failed: %v\n", err)
 		os.Exit(1)

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"sort"
 
-	"turbogrep/internal/regexq"
+	"github.com/torisetxd/turbogrep/internal/regexq"
 )
 
 func search(idx *Index, pattern string) ([]string, error) {

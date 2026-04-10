@@ -1,1 +1,14 @@
-.bench-index
+.bench-index/
+.turbogrep-index/
+
+# Go build/test outputs
+bin/
+dist/
+*.test
+*.out
+coverage.out
+
+# IDE and OS files
+.DS_Store
+.idea/
+.vscode/

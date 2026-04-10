@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"turbogrep/internal/index"
+	"github.com/torisetxd/turbogrep/internal/index"
 )
 
 type Result struct {

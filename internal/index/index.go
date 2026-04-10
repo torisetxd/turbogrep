@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	gitignore "github.com/sabhiram/go-gitignore"
 )
 
 const (
@@ -45,6 +47,10 @@ type BuildStats struct {
 	Trigrams     int
 }
 
+type BuildOptions struct {
+	RespectGitIgnore bool
+}
+
 type Index struct {
 	RepoRoot string
 	Files    []string
@@ -57,30 +63,57 @@ type aggMask struct {
 }
 
 func Build(repoRoot, indexDir string) (BuildStats, error) {
+	return BuildWithOptions(repoRoot, indexDir, BuildOptions{RespectGitIgnore: true})
+}
+
+func BuildWithOptions(repoRoot, indexDir string, opts BuildOptions) (BuildStats, error) {
 	if err := os.MkdirAll(indexDir, 0o755); err != nil {
 		return BuildStats{}, err
 	}
 
+	matcher, err := loadGitIgnore(repoRoot, opts.RespectGitIgnore)
+	if err != nil {
+		return BuildStats{}, err
+	}
+
+	indexRel, _ := filepath.Rel(repoRoot, indexDir)
+	indexRel = filepath.ToSlash(indexRel)
+
 	files := make([]string, 0, 1024)
 	trigramMap := make(map[[3]byte]map[uint32]aggMask)
 
-	err := filepath.WalkDir(repoRoot, func(path string, d fs.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(repoRoot, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
+
+		rel, relErr := filepath.Rel(repoRoot, path)
+		if relErr != nil {
+			return relErr
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			return nil
+		}
+
 		if d.IsDir() {
 			base := d.Name()
 			if base == ".git" || base == ".hg" || base == ".svn" {
 				return fs.SkipDir
 			}
+			if indexRel != "." && indexRel != "" && (rel == indexRel || strings.HasPrefix(rel, indexRel+"/")) {
+				return fs.SkipDir
+			}
+			if matcher != nil && matcher.MatchesPath(rel+"/") {
+				return fs.SkipDir
+			}
 			return nil
 		}
 
-		rel, err := filepath.Rel(repoRoot, path)
-		if err != nil {
-			return err
-		}
 		if strings.HasPrefix(rel, "..") {
+			return nil
+		}
+		if matcher != nil && matcher.MatchesPath(rel) {
 			return nil
 		}
 
@@ -211,6 +244,24 @@ func Build(repoRoot, indexDir string) (BuildStats, error) {
 	}
 
 	return BuildStats{FilesIndexed: len(files), Trigrams: len(entries)}, nil
+}
+
+func loadGitIgnore(repoRoot string, enabled bool) (*gitignore.GitIgnore, error) {
+	if !enabled {
+		return nil, nil
+	}
+	path := filepath.Join(repoRoot, ".gitignore")
+	st, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if st.IsDir() {
+		return nil, nil
+	}
+	return gitignore.CompileIgnoreFile(path)
 }
 
 func Load(indexDir string) (*Index, error) {
