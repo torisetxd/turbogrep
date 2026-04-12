@@ -1,5 +1,6 @@
-.bench-index/
-.turbogrep-index/
+*.bench-index/
+*.turbogrep-index/
+.velocity/turbogrep-index
 
 # Go build/test outputs
 bin/

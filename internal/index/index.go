@@ -161,12 +161,18 @@ func BuildWithOptions(repoRoot, indexDir string, opts BuildOptions) (BuildStats,
 		return BuildStats{}, err
 	}
 
+	tmpDir := filepath.Join(indexDir, ".tmp")
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		return BuildStats{}, err
+	}
+	defer os.RemoveAll(tmpDir)
+
 	entries := make([]entry, 0, len(trigramMap))
-	postingsWriter, err := os.Create(filepath.Join(indexDir, postingsFile))
+	postingsTmp := filepath.Join(tmpDir, postingsFile)
+	postingsWriter, err := os.Create(postingsTmp)
 	if err != nil {
 		return BuildStats{}, err
 	}
-	defer postingsWriter.Close()
 	bw := bufio.NewWriterSize(postingsWriter, 1<<20)
 
 	offset := uint64(0)
@@ -210,11 +216,11 @@ func BuildWithOptions(repoRoot, indexDir string, opts BuildOptions) (BuildStats,
 		return BuildStats{}, err
 	}
 
-	lookupWriter, err := os.Create(filepath.Join(indexDir, lookupFile))
+	lookupTmp := filepath.Join(tmpDir, lookupFile)
+	lookupWriter, err := os.Create(lookupTmp)
 	if err != nil {
 		return BuildStats{}, err
 	}
-	defer lookupWriter.Close()
 
 	if _, err := lookupWriter.Write([]byte(magicLookup)); err != nil {
 		return BuildStats{}, err
@@ -239,11 +245,31 @@ func BuildWithOptions(repoRoot, indexDir string, opts BuildOptions) (BuildStats,
 	if err != nil {
 		return BuildStats{}, err
 	}
-	if err := os.WriteFile(filepath.Join(indexDir, metaFile), metaBytes, 0o644); err != nil {
+	metaTmp := filepath.Join(tmpDir, metaFile)
+	if err := os.WriteFile(metaTmp, metaBytes, 0o644); err != nil {
+		return BuildStats{}, err
+	}
+
+	if err := atomicRename(postingsTmp, filepath.Join(indexDir, postingsFile)); err != nil {
+		return BuildStats{}, err
+	}
+	if err := atomicRename(lookupTmp, filepath.Join(indexDir, lookupFile)); err != nil {
+		return BuildStats{}, err
+	}
+	if err := atomicRename(metaTmp, filepath.Join(indexDir, metaFile)); err != nil {
 		return BuildStats{}, err
 	}
 
 	return BuildStats{FilesIndexed: len(files), Trigrams: len(entries)}, nil
+}
+
+func atomicRename(src, dst string) error {
+	if _, err := os.Stat(dst); err == nil {
+		if err := os.Remove(dst); err != nil {
+			return err
+		}
+	}
+	return os.Rename(src, dst)
 }
 
 func loadGitIgnore(repoRoot string, enabled bool) (*gitignore.GitIgnore, error) {
